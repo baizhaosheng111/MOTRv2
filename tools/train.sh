@@ -51,4 +51,10 @@ git diff > git_diff
 echo $PY_ARGS > desc
 echo " ...Done"
 
-python -m torch.distributed.launch --nproc_per_node=8 --use_env main.py ${args} --output_dir . |& tee -a output.log
+# 添加环境变量以确保正确的数据类型转换
+export PYTHONIOENCODING=utf-8
+
+
+# 将nproc_per_node从8改为您系统上实际可用的GPU数量
+# 例如，如果您有1个GPU，修改为：
+python -m torch.distributed.launch --nproc_per_node=2 --use_env main.py ${args} --output_dir . |& tee -a output.log

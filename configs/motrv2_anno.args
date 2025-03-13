@@ -6,7 +6,7 @@
 --lr 2e-4
 --lr_backbone 2e-5
 --pretrained /home/xyj/MOTRv2/data/projects/motr_mod/r50_deformable_detr_plus_iterative_bbox_refinement-checkpoint.pth
---batch_size 1
+--batch_size 2
 --sample_mode random_interval
 --sample_interval 10
 --sampler_lengths 5
@@ -17,6 +17,7 @@
 --query_interaction_layer QIMv2
 --query_denoise 0.05
 --num_queries 10
---det_db /home/xyj/MOTRv2/data/det_db_motrv2.json  
+--det_db /home/xyj/MOTRv2/data/det_db_anno202503.json
 --use_checkpoint
---mot_path /home/xyj/MOTRv2/data/Dataset/mot/DanceTrack
+--mot_path /home/xyj/MOTRv2/data/Dataset/mot/anno202503
+

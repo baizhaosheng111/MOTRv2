@@ -89,12 +89,12 @@ class HungarianMatcher(nn.Module):
                 gamma = 2.0
                 neg_cost_class = (1 - alpha) * (out_prob ** gamma) * (-(1 - out_prob + 1e-8).log())
                 pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
-                cost_class = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
+                cost_class = pos_cost_class[:, tgt_ids.long()] - neg_cost_class[:, tgt_ids.long()]
             else:
                 # Compute the classification cost. Contrary to the loss, we don't use the NLL,
                 # but approximate it in 1 - proba[target class].
                 # The 1 is a constant that doesn't change the matching, it can be ommitted.
-                cost_class = -out_prob[:, tgt_ids]
+                cost_class = pos_cost_class[:, tgt_ids.long()] - neg_cost_class[:, tgt_ids.long()]
 
             # Compute the L1 cost between boxes
             cost_bbox = torch.cdist(out_bbox, tgt_bbox, p=1)

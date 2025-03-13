@@ -174,6 +174,17 @@ class ClipMatcher(SetCriterion):
         outputs_without_aux = {k: v for k, v in outputs.items() if k != 'aux_outputs'}
 
         gt_instances_i = self.gt_instances[self._current_frame_idx]  # gt instances of i-th image.
+        # 修复：检查gt_instances_i是否为列表，如果是则取第一个元素
+        if isinstance(gt_instances_i, list):
+            if len(gt_instances_i) > 0:
+                gt_instances_i = gt_instances_i[0]
+            else:
+                # 如果列表为空，创建一个空的Instances对象
+                gt_instances_i = Instances((1, 1))
+                gt_instances_i.obj_ids = torch.tensor([], device=outputs_without_aux['track_instances'].device)
+                gt_instances_i.boxes = torch.zeros((0, 4), device=outputs_without_aux['track_instances'].device)
+                gt_instances_i.labels = torch.zeros((0,), device=outputs_without_aux['track_instances'].device, dtype=torch.long)
+
         track_instances: Instances = outputs_without_aux['track_instances']
         pred_logits_i = track_instances.pred_logits  # predicted logits of i-th image.
         pred_boxes_i = track_instances.pred_boxes  # predicted boxes of i-th image.
@@ -460,10 +471,15 @@ class MOTR(nn.Module):
         track_instances = Instances((1, 1))
         num_queries, d_model = self.query_embed.weight.shape  # (300, 512)
         device = self.query_embed.weight.device
-        if proposals is None:
+        if proposals is None or proposals.shape[0] == 0:
             track_instances.ref_pts = self.position.weight
             track_instances.query_pos = self.query_embed.weight
         else:
+            # 确保proposals是张量且有正确的形状
+            if not isinstance(proposals, torch.Tensor):
+                proposals = torch.tensor(proposals, device=device)
+            if proposals.dim() == 1:
+                proposals = proposals.unsqueeze(0)
             track_instances.ref_pts = torch.cat([self.position.weight, proposals[:, :4]])
             track_instances.query_pos = torch.cat([self.query_embed.weight, pos2posemb(proposals[:, 4:], d_model) + self.yolox_embed.weight])
         track_instances.output_embedding = torch.zeros((len(track_instances), d_model), device=device)
@@ -644,19 +660,44 @@ class MOTR(nn.Module):
             'pred_boxes': [],
         }
         track_instances = None
-        keys = list(self._generate_empty_tracks()._fields.keys())
+        # 确保 keys 包含所有必要的属性
+        keys = ['ref_pts', 'query_pos', 'obj_idxes', 'matched_gt_idxes', 
+                'disappear_time', 'iou', 'scores', 'track_scores', 
+                'pred_boxes', 'pred_logits', 'mem_bank', 
+                'mem_padding_mask', 'save_period']
+
         for frame_index, (frame, gt, proposals) in enumerate(zip(frames, data['gt_instances'], data['proposals'])):
-            frame.requires_grad = False
+            # 确保proposals是张量
+            if isinstance(proposals, list):
+                proposals = torch.cat(proposals) if len(proposals) > 0 else torch.zeros((0, 5), device=self.query_embed.weight.device)
+            
+            # 其余代码保持不变
+            if self.training:
+                for f in frame:
+                    if hasattr(f, 'requires_grad'):
+                        f.requires_grad = False
+            else:
+                if hasattr(frame, 'requires_grad'):
+                    frame.requires_grad = False
+            
             is_last = frame_index == len(frames) - 1
 
             if self.query_denoise > 0:
                 l_1 = l_2 = self.query_denoise
-                gtboxes = gt.boxes.clone()
-                _rs = torch.rand_like(gtboxes) * 2 - 1
-                gtboxes[..., :2] += gtboxes[..., 2:] * _rs[..., :2] * l_1
-                gtboxes[..., 2:] *= 1 + l_2 * _rs[..., 2:]
+                # 修改这里：检查gt是否为列表，如果是则处理第一个元素
+                if isinstance(gt, list):
+                    gtboxes = gt[0].boxes.clone() if len(gt) > 0 else None
+                else:
+                    gtboxes = gt.boxes.clone()
+                
+                if gtboxes is not None:
+                    _rs = torch.rand_like(gtboxes) * 2 - 1
+                    gtboxes[..., :2] += gtboxes[..., 2:] * _rs[..., :2] * l_1
+                    gtboxes[..., 2:] *= 1 + l_2 * _rs[..., 2:]
             else:
                 gtboxes = None
+
+            # ... 其余代码保持不变 ...
 
             if track_instances is None:
                 track_instances = self._generate_empty_tracks(proposals)
@@ -665,11 +706,19 @@ class MOTR(nn.Module):
                     self._generate_empty_tracks(proposals),
                     track_instances])
 
+            # 修复：确保frame是正确的格式
             if self.use_checkpoint and frame_index < len(frames) - 1:
                 def fn(frame, gtboxes, *args):
-                    frame = nested_tensor_from_tensor_list([frame])
-                    tmp = Instances((1, 1), **dict(zip(keys, args)))
-                    frame_res = self._forward_single_image(frame, tmp, gtboxes)
+                    # 确保 frame 是正确的格式
+                    if isinstance(frame, list):
+                        frame_tensor = nested_tensor_from_tensor_list(frame)
+                    else:
+                        frame_tensor = nested_tensor_from_tensor_list([frame])
+                    # 重构 track_instances
+                    track_instances = Instances((1, 1))
+                    for k, v in zip(keys, args):
+                        setattr(track_instances, k, v)
+                    frame_res = self._forward_single_image(frame_tensor, track_instances, gtboxes)
                     return (
                         frame_res['pred_logits'],
                         frame_res['pred_boxes'],
@@ -678,7 +727,8 @@ class MOTR(nn.Module):
                         *[aux['pred_boxes'] for aux in frame_res['aux_outputs']]
                     )
 
-                args = [frame, gtboxes] + [track_instances.get(k) for k in keys]
+                # 使用 getattr 提取属性
+                args = [frame, gtboxes] + [getattr(track_instances, k) for k in keys]
                 params = tuple((p for p in self.parameters() if p.requires_grad))
                 tmp = checkpoint.CheckpointFunction.apply(fn, len(args), *args, *params)
                 frame_res = {
@@ -691,8 +741,14 @@ class MOTR(nn.Module):
                     } for i in range(5)],
                 }
             else:
-                frame = nested_tensor_from_tensor_list([frame])
-                frame_res = self._forward_single_image(frame, track_instances, gtboxes)
+                # 修复：确保frame是正确的格式
+                if isinstance(frame, list):
+                    # 如果frame已经是列表，直接使用
+                    frame_tensor = nested_tensor_from_tensor_list(frame)
+                else:
+                    # 如果frame是单个张量，包装为列表
+                    frame_tensor = nested_tensor_from_tensor_list([frame])
+                frame_res = self._forward_single_image(frame_tensor, track_instances, gtboxes)
             frame_res = self._post_process_single_image(frame_res, track_instances, is_last)
 
             track_instances = frame_res['track_instances']

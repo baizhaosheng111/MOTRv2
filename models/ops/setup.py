@@ -24,6 +24,11 @@ def get_extensions():
     this_dir = os.path.dirname(os.path.abspath(__file__))
     extensions_dir = os.path.join(this_dir, "src")
 
+    # 修复CUDA_HOME路径问题
+    if CUDA_HOME is not None and CUDA_HOME.startswith(':'):
+        os.environ['CUDA_HOME'] = CUDA_HOME[1:]  # 移除开头的冒号
+        print(f"Fixed CUDA_HOME: {os.environ['CUDA_HOME']}")
+
     main_file = glob.glob(os.path.join(extensions_dir, "*.cpp"))
     source_cpu = glob.glob(os.path.join(extensions_dir, "cpu", "*.cpp"))
     source_cuda = glob.glob(os.path.join(extensions_dir, "cuda", "*.cu"))
@@ -43,8 +48,16 @@ def get_extensions():
             "-D__CUDA_NO_HALF_CONVERSIONS__",
             "-D__CUDA_NO_HALF2_OPERATORS__",
         ]
+        
+        # 为CUDA 11.7指定兼容的计算架构
+        extra_compile_args["nvcc"].extend([
+            "-gencode=arch=compute_70,code=sm_70",
+            "-gencode=arch=compute_75,code=sm_75",
+            "-gencode=arch=compute_80,code=sm_80",
+            "-gencode=arch=compute_86,code=sm_86"
+        ])
     else:
-        raise NotImplementedError('Cuda is not availabel')
+        raise NotImplementedError('Cuda is not available')  # 修正拼写错误
 
     sources = [os.path.join(extensions_dir, s) for s in sources]
     include_dirs = [extensions_dir]
