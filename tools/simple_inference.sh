@@ -7,5 +7,5 @@
 set -x
 set -o pipefail
 
-args=$(cat configs/motrv2.args)
+args=$(cat configs/motrv2_anno.args)
 python3 submit_dance.py ${args} --exp_name tracker --resume $1
