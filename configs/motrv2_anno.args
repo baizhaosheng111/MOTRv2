@@ -17,7 +17,7 @@
 --query_interaction_layer QIMv2
 --query_denoise 0.05
 --num_queries 10
---det_db /home/xyj/MOTRv2/data/det_db_anno202503.json
+--det_db /home/xyj/MOTRv2/data/det_db_anno20250320.json
 --use_checkpoint
 --mot_path /home/xyj/MOTRv2/data/Dataset/mot/anno202503
 

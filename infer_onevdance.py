@@ -10,6 +10,7 @@
 
 from copy import deepcopy
 import json
+import numpy as np  # 添加numpy导入
 
 import os
 import argparse
@@ -48,17 +49,18 @@ class ListImgDataset(Dataset):
         proposals = []
         im_h, im_w = cur_img.shape[:2]
         
-        # 修改这部分代码，添加异常处理
-        det_key = 'anno202503/' + f_path[:-4] + '.txt'
-        if det_key in self.det_db:
-            for line in self.det_db[det_key]:
-                l, t, w, h, s = list(map(float, line.split(',')))
-                proposals.append([(l + w / 2) / im_w,
-                                  (t + h / 2) / im_h,
-                                  w / im_w,
-                                  h / im_h,
-                                  s])
-
+        # 修改这部分代码，如果检测不到键，返回None表示需要跳过这一帧
+        det_key =  f_path[:-4] + '.txt'
+        if det_key not in self.det_db:
+            return None, None  # 返回None表示需要跳过这一帧
+            
+        for line in self.det_db[det_key]:
+            l, t, w, h, s = list(map(float, line.split(',')))
+            proposals.append([(l + w / 2) / im_w,
+                              (t + h / 2) / im_h,
+                              w / im_w,
+                              h / im_h,
+                              s])
             
         return cur_img, torch.as_tensor(proposals).reshape(-1, 5) if proposals else torch.zeros((0, 5))
 
@@ -79,7 +81,23 @@ class ListImgDataset(Dataset):
         return len(self.img_list)
     
     def __getitem__(self, index):
+        # 修改这部分代码，处理跳过帧的情况
         img, proposals = self.load_img_from_file(self.img_list[index])
+        if img is None:  # 如果需要跳过这一帧
+            # 尝试找到下一个有效的帧
+            next_index = index + 1
+            while next_index < len(self.img_list):
+                img, proposals = self.load_img_from_file(self.img_list[next_index])
+                if img is not None:
+                    break
+                next_index += 1
+                
+            # 如果所有后续帧都无效，则返回一个空的结果
+            if img is None:
+                # 创建一个空的图像和proposals
+                empty_img = np.zeros((100, 100, 3), dtype=np.uint8)
+                return self.init_img(empty_img, torch.zeros((0, 5)))
+                
         return self.init_img(img, proposals)
 
 # 跟踪
@@ -149,6 +167,9 @@ class Detector(object):
             for xyxy, track_id in zip(bbox_xyxy, identities):
                 if track_id < 0 or track_id is None:
                     continue
+                # 添加判断，当跟踪ID大于5时打印提示信息
+                if track_id > 5:
+                    print("ID大于5")
                 x1, y1, x2, y2 = xyxy
                 w, h = x2 - x1, y2 - y1
                 lines.append(save_format.format(frame=i + 1, id=track_id, x1=x1, y1=y1, w=w, h=h))
@@ -157,7 +178,7 @@ class Detector(object):
         print("totally {} dts {} occlusion dts".format(total_dts, total_occlusion_dts))
 
 class RuntimeTrackerBase(object):
-    def __init__(self, score_thresh=0.6, filter_score_thresh=0.5, miss_tolerance=10):
+    def __init__(self, score_thresh=0.6, filter_score_thresh=0.5, miss_tolerance=100):
         self.score_thresh = score_thresh
         self.filter_score_thresh = filter_score_thresh
         self.miss_tolerance = miss_tolerance
@@ -170,16 +191,23 @@ class RuntimeTrackerBase(object):
         device = track_instances.obj_idxes.device
 
         track_instances.disappear_time[track_instances.scores >= self.score_thresh] = 0
+        print("跟踪分数：",track_instances.scores)
         new_obj = (track_instances.obj_idxes == -1) & (track_instances.scores >= self.score_thresh)
-        disappeared_obj = (track_instances.obj_idxes >= 0) & (track_instances.scores < self.filter_score_thresh)
+        print("obj_idxes：",track_instances.obj_idxes)
+        print("新目标：",new_obj)
+        disappeared_obj = (track_instances.obj_idxes >= 0) & (track_instances.scores < self.filter_score_thresh) # 这一帧消失的目标
+        
         num_new_objs = new_obj.sum().item()
 
-        track_instances.obj_idxes[new_obj] = self.max_obj_id + torch.arange(num_new_objs, device=device)
-        self.max_obj_id += num_new_objs
+        track_instances.obj_idxes[new_obj] = self.max_obj_id + torch.arange(num_new_objs, device=device) 
 
-        track_instances.disappear_time[disappeared_obj] += 1
-        to_del = disappeared_obj & (track_instances.disappear_time >= self.miss_tolerance)
-        track_instances.obj_idxes[to_del] = -1
+        self.max_obj_id += num_new_objs # 现在最大ID数
+
+        track_instances.disappear_time[disappeared_obj] += 1 #消失时间+1帧
+
+        to_del = disappeared_obj & (track_instances.disappear_time >= self.miss_tolerance)  # 消失状态与消失时间超过阈值
+
+        track_instances.obj_idxes[to_del] = -1 #?
 
 
 if __name__ == '__main__':
@@ -192,7 +220,7 @@ if __name__ == '__main__':
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
-    # load model and weights
+    # 加载模型和权重
     detr, _, _ = build_model(args)
     detr.track_embed.score_thr = args.update_score_threshold
     detr.track_base = RuntimeTrackerBase(args.score_threshold, args.score_threshold, args.miss_tolerance)
@@ -201,17 +229,7 @@ if __name__ == '__main__':
     detr.eval()
     detr = detr.cuda()
 
-    # '''for MOT17 submit''' 
-    sub_dir = 'test'
-    seq_nums = os.listdir(os.path.join(args.mot_path, sub_dir))
-    if 'seqmap' in seq_nums:
-        seq_nums.remove('seqmap')
-    vids = [os.path.join(sub_dir, seq) for seq in seq_nums]
-
-    rank = int(os.environ.get('RLAUNCH_REPLICA', '0'))
-    ws = int(os.environ.get('RLAUNCH_REPLICA_TOTAL', '1'))
-    vids = vids[rank::ws]
-
-    for vid in vids:
-        det = Detector(args, model=detr, vid=vid)
-        det.detect(args.score_threshold)
+    # 只测试指定的单个视频
+    vid = 'train/dancetrack0001'
+    det = Detector(args, model=detr, vid=vid)
+    det.detect(args.score_threshold)
