@@ -20,3 +20,4 @@
 --det_db /home/xyj/MOTRv2/data/det_db_motrv2.json  
 --use_checkpoint
 --mot_path /home/xyj/MOTRv2/data/Dataset/mot/DanceTrack
+

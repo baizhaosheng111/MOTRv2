@@ -7,7 +7,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 # ------------------------------------------------------------------------
 
-from .motr import build as build_motr
+from .motr0321 import build as build_motr
 
 
 def build_model(args):

@@ -168,8 +168,8 @@ class Detector(object):
                 if track_id < 0 or track_id is None:
                     continue
                 # 添加判断，当跟踪ID大于5时打印提示信息
-                if track_id > 5:
-                    print("ID大于5")
+                # if track_id > 5:
+                #     print("ID大于5")
                 x1, y1, x2, y2 = xyxy
                 w, h = x2 - x1, y2 - y1
                 lines.append(save_format.format(frame=i + 1, id=track_id, x1=x1, y1=y1, w=w, h=h))
@@ -178,7 +178,7 @@ class Detector(object):
         print("totally {} dts {} occlusion dts".format(total_dts, total_occlusion_dts))
 
 class RuntimeTrackerBase(object):
-    def __init__(self, score_thresh=0.6, filter_score_thresh=0.5, miss_tolerance=100):
+    def __init__(self, score_thresh, filter_score_thresh, miss_tolerance=100):
         self.score_thresh = score_thresh
         self.filter_score_thresh = filter_score_thresh
         self.miss_tolerance = miss_tolerance
@@ -192,7 +192,9 @@ class RuntimeTrackerBase(object):
 
         track_instances.disappear_time[track_instances.scores >= self.score_thresh] = 0
         print("跟踪分数：",track_instances.scores)
+        print("track_instances.obj_idxes：",track_instances.obj_idxes)
         new_obj = (track_instances.obj_idxes == -1) & (track_instances.scores >= self.score_thresh)
+        
         print("新目标：",new_obj)
         disappeared_obj = (track_instances.obj_idxes >= 0) & (track_instances.scores < self.filter_score_thresh)
         
@@ -210,8 +212,8 @@ class RuntimeTrackerBase(object):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser('DETR training and evaluation script', parents=[get_args_parser()])
-    parser.add_argument('--score_threshold', default=0.5, type=float)
-    parser.add_argument('--update_score_threshold', default=0.5, type=float)
+    parser.add_argument('--score_threshold', default=0.53, type=float)
+    parser.add_argument('--update_score_threshold', default=0.7, type=float)
     parser.add_argument('--miss_tolerance', default=20, type=int)
     args = parser.parse_args()
     if args.output_dir:

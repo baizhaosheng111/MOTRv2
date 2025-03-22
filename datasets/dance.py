@@ -176,7 +176,13 @@ class DetMOTDetection:
     def _pre_single_frame(self, vid, idx: int):
         # 修改img_path的构建方式
         vid_parts = vid.split('/')
-        img_path = os.path.join(self.mot_path, vid, 'img1', f'{idx:08d}.jpg')
+        # img_path = os.path.join(self.mot_path, vid, 'img1', f'{idx:08d}.jpg')
+                # 修改：尝试不同的图片文件名格式
+        img_path = os.path.join(self.mot_path, vid, 'img1', f'{idx}.jpg')
+        if not os.path.exists(img_path):
+            # 如果没有找到不带前导零的文件，尝试带前导零的格式
+            img_path = os.path.join(self.mot_path, vid, 'img1', f'{idx:08d}.jpg')
+
         img = Image.open(img_path)
         targets = {}
         w, h = img._size

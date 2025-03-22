@@ -30,8 +30,8 @@ def process_gt_file(gt_file_path):
 
 def main():
     # 基础路径
-    base_dir = "/home/xyj/MOTRv2/data/Dataset/mot/anno202503"
-    output_file = "/home/xyj/MOTRv2/data/det_db_anno20250320.json"
+    base_dir = "/home/xyj/MOTRv2/data/Dataset/mot/weimi250322train"
+    output_file = "/home/xyj/MOTRv2/data/det_db_weimi250322.json"
     
     # 存储结果的字典
     result_dict = {}
@@ -59,7 +59,7 @@ def main():
                 # 将每一帧的bbox添加到结果字典中
                 for frame_id, bbox_list in frame_bboxes.items():
                     # 构建图像文件路径作为键 (格式: anno202503/split/seq/img1/00000xxx.txt)
-                    img_key = f"anno202503/{split}/{seq}/img1/{frame_id:08d}.txt"
+                    img_key = f"weimi250322train/{split}/{seq}/img1/{frame_id:08d}.txt"
                     
                     # 如果有结果，添加到字典中
                     if bbox_list:

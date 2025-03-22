@@ -58,13 +58,13 @@ def process(trk_path, img_dir, output_dir, video_name):
 
 def main():
     parser = argparse.ArgumentParser(description='可视化MOT跟踪结果')
-    parser.add_argument('--video_name', type=str, default='dancetrack0001',
+    parser.add_argument('--video_name', type=str, default='321600071741168756943',
                         help='视频名称')
     args = parser.parse_args()
     
     video_name = args.video_name
     trk_path = f"/home/xyj/MOTRv2/tracker/{video_name}.txt"
-    img_dir = f"/home/xyj/MOTRv2/data/Dataset/mot/DanceTrack/train/{video_name}/img1"
+    img_dir = f"/home/xyj/MOTRv2/data/Dataset/mot/anno202503/train/{video_name}/img1"
     output_dir = f"/home/xyj/MOTRv2/visualize/{video_name}/img1"
     
     # 检查文件和目录是否存在

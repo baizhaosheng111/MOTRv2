@@ -168,8 +168,8 @@ class Detector(object):
                 if track_id < 0 or track_id is None:
                     continue
                 # 添加判断，当跟踪ID大于5时打印提示信息
-                if track_id > 5:
-                    print("ID大于5")
+                # if track_id > 5:
+                #     print("ID大于5")
                 x1, y1, x2, y2 = xyxy
                 w, h = x2 - x1, y2 - y1
                 lines.append(save_format.format(frame=i + 1, id=track_id, x1=x1, y1=y1, w=w, h=h))
@@ -191,10 +191,10 @@ class RuntimeTrackerBase(object):
         device = track_instances.obj_idxes.device
 
         track_instances.disappear_time[track_instances.scores >= self.score_thresh] = 0
-        print("跟踪分数：",track_instances.scores)
+        # print("跟踪分数：",track_instances.scores)
         new_obj = (track_instances.obj_idxes == -1) & (track_instances.scores >= self.score_thresh)
-        print("obj_idxes：",track_instances.obj_idxes)
-        print("新目标：",new_obj)
+        #print("obj_idxes：",track_instances.obj_idxes)
+        #print("新目标：",new_obj)
         disappeared_obj = (track_instances.obj_idxes >= 0) & (track_instances.scores < self.filter_score_thresh) # 这一帧消失的目标
         
         num_new_objs = new_obj.sum().item()
@@ -213,18 +213,23 @@ class RuntimeTrackerBase(object):
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser('DETR training and evaluation script', parents=[get_args_parser()])
-    parser.add_argument('--score_threshold', default=0.5, type=float)
-    parser.add_argument('--update_score_threshold', default=0.5, type=float)
+    parser.add_argument('--score_threshold', default=0.04, type=float)
+    parser.add_argument('--update_score_threshold', default=0.04, type=float)
     parser.add_argument('--miss_tolerance', default=20, type=int)
     args = parser.parse_args()
     if args.output_dir:
         Path(args.output_dir).mkdir(parents=True, exist_ok=True)
 
     # 加载模型和权重
-    detr, _, _ = build_model(args)
-    detr.track_embed.score_thr = args.update_score_threshold
+
+    detr, _, _ = build_model(args) # 整个模型
+    print(detr)
+    detr.track_embed.score_thr = args.update_score_threshold  # resnet的阈值？
+    #print(detr.track_embed)
     detr.track_base = RuntimeTrackerBase(args.score_threshold, args.score_threshold, args.miss_tolerance)
+    #print(detr)
     checkpoint = torch.load(args.resume, map_location='cpu')
+
     detr = load_model(detr, args.resume)
     detr.eval()
     detr = detr.cuda()
